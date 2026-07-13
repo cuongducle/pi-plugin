@@ -1,59 +1,43 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { renderReviewResult, renderStoredJobResult } from "../plugins/codex/scripts/lib/render.mjs";
+import { renderReviewResult, renderStoredJobResult } from "../plugins/pi/scripts/lib/render.mjs";
 
-test("renderReviewResult degrades gracefully when JSON is missing required review fields", () => {
+test("renderReviewResult renders structured Pi findings", () => {
   const output = renderReviewResult(
     {
       parsed: {
-        verdict: "approve",
-        summary: "Looks fine."
+        verdict: "needs-attention",
+        summary: "One issue.",
+        findings: [{ severity: "high", title: "Guard missing", body: "Empty input fails.", file: "src/app.js", line_start: 4 }],
+        next_steps: ["Add a regression test."]
       },
-      rawOutput: JSON.stringify({
-        verdict: "approve",
-        summary: "Looks fine."
-      }),
+      rawOutput: "",
       parseError: null
     },
-    {
-      reviewLabel: "Adversarial Review",
-      targetLabel: "working tree diff"
-    }
+    { reviewLabel: "Adversarial Review", targetLabel: "working tree diff" }
   );
 
-  assert.match(output, /Codex returned JSON with an unexpected review shape\./);
-  assert.match(output, /Missing array `findings`\./);
-  assert.match(output, /Raw final message:/);
+  assert.match(output, /^# Pi Adversarial Review/);
+  assert.match(output, /\[high\] Guard missing \(src\/app\.js:4\)/);
+  assert.match(output, /Add a regression test/);
 });
 
-test("renderStoredJobResult prefers rendered output for structured review jobs", () => {
-  const output = renderStoredJobResult(
-    {
-      id: "review-123",
-      status: "completed",
-      title: "Codex Adversarial Review",
-      jobClass: "review",
-      threadId: "thr_123"
-    },
-    {
-      threadId: "thr_123",
-      rendered: "# Codex Adversarial Review\n\nTarget: working tree diff\nVerdict: needs-attention\n",
-      result: {
-        result: {
-          verdict: "needs-attention",
-          summary: "One issue.",
-          findings: [],
-          next_steps: []
-        },
-        rawOutput:
-          '{"verdict":"needs-attention","summary":"One issue.","findings":[],"next_steps":[]}'
-      }
-    }
+test("renderReviewResult preserves invalid raw output for diagnosis", () => {
+  const output = renderReviewResult(
+    { parsed: null, rawOutput: "not json", parseError: "invalid JSON" },
+    { reviewLabel: "Review", targetLabel: "working tree diff" }
   );
+  assert.match(output, /Pi did not return valid structured JSON/);
+  assert.match(output, /not json/);
+});
 
-  assert.match(output, /^# Codex Adversarial Review/);
-  assert.doesNotMatch(output, /^\{/);
-  assert.match(output, /Codex session ID: thr_123/);
-  assert.match(output, /Resume in Codex: codex resume thr_123/);
+test("renderStoredJobResult appends a resumable Pi session command", () => {
+  const output = renderStoredJobResult(
+    { id: "task-123", status: "completed", title: "Pi Task", threadId: "/tmp/pi-session.jsonl" },
+    { threadId: "/tmp/pi-session.jsonl", rendered: "Implemented the fix.\n", result: { rawOutput: "Implemented the fix." } }
+  );
+  assert.match(output, /^Implemented the fix\./);
+  assert.match(output, /Pi session ID: \/tmp\/pi-session\.jsonl/);
+  assert.match(output, /pi --session \/tmp\/pi-session\.jsonl/);
 });

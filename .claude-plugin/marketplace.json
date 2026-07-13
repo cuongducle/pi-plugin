@@ -1,21 +1,22 @@
 {
-  "name": "openai-codex",
+  "name": "pi-plugin",
   "owner": {
-    "name": "OpenAI"
+    "name": "cuongducle"
   },
   "metadata": {
-    "description": "Codex plugins to use in Claude Code for delegation and code review.",
-    "version": "1.0.6"
+    "description": "Pi plugin for Claude Code delegation and code review.",
+    "version": "0.1.0"
   },
   "plugins": [
     {
-      "name": "codex",
-      "description": "Use Codex from Claude Code to review code or delegate tasks.",
-      "version": "1.0.6",
+      "name": "pi",
+      "description": "Use earendil-works/pi from Claude Code to review code or delegate tasks.",
+      "version": "0.1.0",
       "author": {
-        "name": "OpenAI"
+        "name": "cuongducle",
+        "url": "https://github.com/cuongducle"
       },
-      "source": "./plugins/codex"
+      "source": "./plugins/pi"
     }
   ]
 }

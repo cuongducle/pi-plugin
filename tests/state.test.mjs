@@ -4,102 +4,45 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { makeTempDir } from "./helpers.mjs";
-import { resolveJobFile, resolveJobLogFile, resolveStateDir, resolveStateFile, saveState } from "../plugins/codex/scripts/lib/state.mjs";
+import { initGitRepo, makeTempDir } from "./helpers.mjs";
+import { listJobs, resolveJobFile, resolveJobLogFile, resolveStateDir, saveState } from "../plugins/pi/scripts/lib/state.mjs";
 
 test("resolveStateDir uses a temp-backed per-workspace directory", () => {
   const workspace = makeTempDir();
+  initGitRepo(workspace);
   const stateDir = resolveStateDir(workspace);
-
   assert.equal(stateDir.startsWith(os.tmpdir()), true);
   assert.match(path.basename(stateDir), /.+-[a-f0-9]{16}$/);
-  assert.match(stateDir, new RegExp(`^${os.tmpdir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 });
 
-test("resolveStateDir uses CLAUDE_PLUGIN_DATA when it is provided", () => {
+test("resolveStateDir uses CLAUDE_PLUGIN_DATA when provided", () => {
   const workspace = makeTempDir();
+  initGitRepo(workspace);
   const pluginDataDir = makeTempDir();
-  const previousPluginDataDir = process.env.CLAUDE_PLUGIN_DATA;
+  const previous = process.env.CLAUDE_PLUGIN_DATA;
   process.env.CLAUDE_PLUGIN_DATA = pluginDataDir;
-
   try {
-    const stateDir = resolveStateDir(workspace);
-
-    assert.equal(stateDir.startsWith(path.join(pluginDataDir, "state")), true);
-    assert.match(path.basename(stateDir), /.+-[a-f0-9]{16}$/);
-    assert.match(
-      stateDir,
-      new RegExp(`^${path.join(pluginDataDir, "state").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
-    );
+    assert.match(resolveStateDir(workspace), new RegExp(`^${path.join(pluginDataDir, "pi-plugin").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   } finally {
-    if (previousPluginDataDir == null) {
-      delete process.env.CLAUDE_PLUGIN_DATA;
-    } else {
-      process.env.CLAUDE_PLUGIN_DATA = previousPluginDataDir;
-    }
+    if (previous == null) delete process.env.CLAUDE_PLUGIN_DATA;
+    else process.env.CLAUDE_PLUGIN_DATA = previous;
   }
 });
 
-test("saveState prunes dropped job artifacts when indexed jobs exceed the cap", () => {
-  const workspace = makeTempDir();
-  const stateFile = resolveStateFile(workspace);
-  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-
+test("saveState keeps the newest 50 jobs and removes pruned artifacts", () => {
+  const stateDir = makeTempDir();
   const jobs = Array.from({ length: 51 }, (_, index) => {
-    const jobId = `job-${index}`;
-    const updatedAt = new Date(Date.UTC(2026, 0, 1, 0, index, 0)).toISOString();
-    const logFile = resolveJobLogFile(workspace, jobId);
-    const jobFile = resolveJobFile(workspace, jobId);
-    fs.writeFileSync(logFile, `log ${jobId}\n`, "utf8");
-    fs.writeFileSync(jobFile, JSON.stringify({ id: jobId, status: "completed" }, null, 2), "utf8");
-    return {
-      id: jobId,
-      status: "completed",
-      logFile,
-      updatedAt,
-      createdAt: updatedAt
-    };
+    const id = `job-${index}`;
+    const createdAt = new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString();
+    fs.mkdirSync(path.dirname(resolveJobFile(stateDir, id)), { recursive: true });
+    fs.writeFileSync(resolveJobFile(stateDir, id), "{}\n");
+    fs.writeFileSync(resolveJobLogFile(stateDir, id), "log\n");
+    return { id, createdAt };
   });
 
-  fs.writeFileSync(
-    stateFile,
-    `${JSON.stringify(
-      {
-        version: 1,
-        config: { stopReviewGate: false },
-        jobs
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
-
-  saveState(workspace, {
-    version: 1,
-    config: { stopReviewGate: false },
-    jobs
-  });
-
-  const prunedJobFile = resolveJobFile(workspace, "job-0");
-  const prunedLogFile = resolveJobLogFile(workspace, "job-0");
-  const retainedJobFile = resolveJobFile(workspace, "job-50");
-  const retainedLogFile = resolveJobLogFile(workspace, "job-50");
-  const jobsDir = path.dirname(prunedJobFile);
-
-  assert.equal(fs.existsSync(retainedJobFile), true);
-  assert.equal(fs.existsSync(retainedLogFile), true);
-
-  const savedState = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-  assert.equal(savedState.jobs.length, 50);
-  assert.deepEqual(
-    savedState.jobs.map((job) => job.id),
-    Array.from({ length: 50 }, (_, index) => `job-${50 - index}`)
-  );
-  assert.deepEqual(
-    fs.readdirSync(jobsDir).sort(),
-    Array.from({ length: 50 }, (_, index) => `job-${index + 1}`)
-      .flatMap((jobId) => [`${jobId}.json`, `${jobId}.log`])
-      .sort()
-  );
+  saveState(stateDir, { jobs });
+  assert.equal(listJobs(stateDir).length, 50);
+  assert.equal(fs.existsSync(resolveJobFile(stateDir, "job-0")), false);
+  assert.equal(fs.existsSync(resolveJobLogFile(stateDir, "job-0")), false);
+  assert.equal(listJobs(stateDir)[0].id, "job-50");
 });
