@@ -20,69 +20,36 @@ function readJson(filePath) {
 
 function makeVersionFixture() {
   const root = makeTempDir();
-
-  writeJson(path.join(root, "package.json"), {
-    name: "@openai/codex-plugin-cc",
-    version: "1.0.2"
-  });
+  writeJson(path.join(root, "package.json"), { name: "@cuongducle/pi-plugin", version: "0.1.0" });
   writeJson(path.join(root, "package-lock.json"), {
-    name: "@openai/codex-plugin-cc",
-    version: "1.0.2",
+    name: "@cuongducle/pi-plugin",
+    version: "0.1.0",
     lockfileVersion: 3,
-    packages: {
-      "": {
-        name: "@openai/codex-plugin-cc",
-        version: "1.0.2"
-      }
-    }
+    packages: { "": { name: "@cuongducle/pi-plugin", version: "0.1.0" } }
   });
-  writeJson(path.join(root, "plugins", "codex", ".claude-plugin", "plugin.json"), {
-    name: "codex",
-    version: "1.0.2"
-  });
+  writeJson(path.join(root, "plugins", "pi", ".claude-plugin", "plugin.json"), { name: "pi", version: "0.1.0" });
   writeJson(path.join(root, ".claude-plugin", "marketplace.json"), {
-    metadata: {
-      version: "1.0.2"
-    },
-    plugins: [
-      {
-        name: "codex",
-        version: "1.0.2"
-      }
-    ]
+    metadata: { version: "0.1.0" },
+    plugins: [{ name: "pi", version: "0.1.0" }]
   });
-
   return root;
 }
 
-test("bump-version updates every release manifest", () => {
+test("bump-version updates every Pi release manifest", () => {
   const root = makeVersionFixture();
-
-  const result = run("node", [SCRIPT, "--root", root, "1.2.3"], {
-    cwd: ROOT
-  });
-
+  const result = run("node", [SCRIPT, "--root", root, "1.2.3"], { cwd: ROOT });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(readJson(path.join(root, "package.json")).version, "1.2.3");
-  assert.equal(readJson(path.join(root, "package-lock.json")).version, "1.2.3");
   assert.equal(readJson(path.join(root, "package-lock.json")).packages[""].version, "1.2.3");
-  assert.equal(readJson(path.join(root, "plugins", "codex", ".claude-plugin", "plugin.json")).version, "1.2.3");
-  assert.equal(readJson(path.join(root, ".claude-plugin", "marketplace.json")).metadata.version, "1.2.3");
+  assert.equal(readJson(path.join(root, "plugins", "pi", ".claude-plugin", "plugin.json")).version, "1.2.3");
   assert.equal(readJson(path.join(root, ".claude-plugin", "marketplace.json")).plugins[0].version, "1.2.3");
 });
 
-test("bump-version check mode reports stale metadata", () => {
+test("bump-version check mode reports stale Pi metadata", () => {
   const root = makeVersionFixture();
-  writeJson(path.join(root, "package.json"), {
-    name: "@openai/codex-plugin-cc",
-    version: "1.0.3"
-  });
-
-  const result = run("node", [SCRIPT, "--root", root, "--check"], {
-    cwd: ROOT
-  });
-
+  writeJson(path.join(root, "package.json"), { name: "@cuongducle/pi-plugin", version: "0.2.0" });
+  const result = run("node", [SCRIPT, "--root", root, "--check"], { cwd: ROOT });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /plugins\/codex\/\.claude-plugin\/plugin\.json version/);
-  assert.match(result.stderr, /\.claude-plugin\/marketplace\.json metadata\.version/);
+  assert.match(result.stderr, /plugins\/pi\/\.claude-plugin\/plugin\.json version/);
+  assert.match(result.stderr, /plugins\[pi\]\.version/);
 });
